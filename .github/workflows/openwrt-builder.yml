@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      actions: write
 
     steps:
     - name: Checkout
@@ -86,6 +87,19 @@ jobs:
       run: |
         cd openwrt
         make defconfig
+        # Fail early if a required package was dropped by defconfig.
+        for pkg in \
+          nikki mihomo-meta luci-app-nikki luci-i18n-nikki-zh-cn yq \
+          kmod-tun kmod-nft-tproxy kmod-nft-socket kmod-inet-diag kmod-dummy \
+          kmod-mt_wifi luci-app-mtwifi-cfg \
+          luci-app-ttyd kmod-wireguard wireguard-tools luci-proto-wireguard \
+          kmod-usb-storage kmod-fs-ext4 kmod-fs-exfat kmod-fs-ntfs3; do
+          grep -Fxq "CONFIG_PACKAGE_${pkg}=y" .config || { echo "Missing from .config: ${pkg}" >&2; exit 1; }
+        done
+        for pkg in luci-app-passwall sing-box mihomo-alpha; do
+          if grep -Fxq "CONFIG_PACKAGE_${pkg}=y" .config; then echo "Unexpected in .config: ${pkg}" >&2; exit 1; fi
+        done
+        grep -Fxq 'CONFIG_TARGET_mediatek_filogic_DEVICE_cmcc_xr30-nand-mtkuboot=y' .config
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -95,7 +109,7 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         DEVICE_NAME="$(grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' | sort -u | tr '\n' '_' | sed 's/_$//')"
         [ -n "$DEVICE_NAME" ] && echo "DEVICE_NAME=_${DEVICE_NAME}" >> $GITHUB_ENV
@@ -104,6 +118,16 @@ jobs:
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
+
+    - name: Verify firmware contents
+      if: steps.compile.outputs.status == 'success'
+      run: |
+        cd openwrt/bin/targets/*/*
+        manifest="$(ls *cmcc_xr30-nand-mtkuboot.manifest)"
+        for pkg in nikki mihomo-meta luci-app-nikki kmod-tun kmod-nft-tproxy kmod-nft-socket kmod-mt_wifi kmod-wireguard luci-app-ttyd; do
+          grep -q "^${pkg} - " "$manifest" || { echo "Missing from firmware: ${pkg}" >&2; exit 1; }
+        done
+        ls -lh *cmcc_xr30-nand-mtkuboot-squashfs-factory.bin *cmcc_xr30-nand-mtkuboot-squashfs-sysupgrade.bin
 
     - name: Upload bin directory
       uses: actions/upload-artifact@main
@@ -152,20 +176,16 @@ jobs:
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.ACTIONS_TRIGGER_PAT }}
       with:
-        token: ${{ secrets.ACTIONS_TRIGGER_PAT }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         retain_days: 0
         keep_minimum_runs: 2
 
     - name: Remove old Releases
       uses: actions/github-script@v9
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.ACTIONS_TRIGGER_PAT }}
       with:
-        github-token: ${{ secrets.ACTIONS_TRIGGER_PAT }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const keepLatest = 3;
           const deleteTags = true;

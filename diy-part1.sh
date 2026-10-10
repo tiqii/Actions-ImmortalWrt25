@@ -10,12 +10,5 @@
 # See /LICENSE for more information.
 #
 
-# Uncomment a feed source
-#sed -i 's/^#\(.*helloworld\)/\1/' feeds.conf.default
-
-# Add a feed source
-#echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
-#echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
-
-echo 'https://master.dl.sourceforge.net/project/openwrt-passwall-build/releases/packages-25.12/aarch64_cortex-a53/passwall_luci/packages.adb' >>./package/system/opkg/files/customfeeds.conf
-echo 'https://master.dl.sourceforge.net/project/openwrt-passwall-build/releases/packages-25.12/aarch64_cortex-a53/passwall_packages/packages.adb' >>./package/system/opkg/files/customfeeds.conf
+# Add the nikki (mihomo) feed, pinned to a known-good commit (mihomo-meta v1.19.31)
+echo 'src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git^7b203f6c4c5e94c6c0026acb301090aa1d310e7f' >>feeds.conf.default
